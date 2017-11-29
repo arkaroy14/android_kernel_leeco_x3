@@ -33,7 +33,6 @@
 #include <linux/cpuidle.h>
 #include <linux/leds.h>
 #include <linux/console.h>
-#include <linux/mtk_ram_console.h>
 
 #include <asm/cacheflush.h>
 #include <asm/idmap.h>
@@ -294,8 +293,6 @@ void machine_shutdown(void)
 	 * thread that might wind up blocking on
 	 * one of the stopped CPUs.
 	 */
-    printk("machine_shutdown: start, Proess(%s:%d)\n", current->comm, current->pid);
-    dump_stack();
 	preempt_disable();
 #endif
 	disable_nonboot_cpus();
@@ -388,40 +385,8 @@ void machine_restart(char *cmd)
 	/* Disable interrupts first */
 	local_irq_disable();
 	local_fiq_disable();
-	
+
 	smp_send_stop();
-
-	if(reboot_pid > 1)
-	{
-		tsk = find_task_by_vpid(reboot_pid);
-		if(tsk == NULL)
-			tsk = current;		
-		dump_stack();
-	}
-	else
-	{
-		tsk = current;
-		dump_stack();
-	}
-
-	if(tsk->real_parent)
-	{
-	 if(tsk->real_parent->real_parent)
-	 {
-	   printk("machine_shutdown: start, Proess(%s:%d). father %s:%d. grandfather %s:%d.\n",
-		tsk->comm, tsk->pid,tsk->real_parent->comm,tsk->real_parent->pid,
-		tsk->real_parent->real_parent->comm,tsk->real_parent->real_parent->pid);
-	 }
-	 else
-	 {
-	   printk("machine_shutdown: start, Proess(%s:%d). father %s:%d.\n", 
-		tsk->comm, tsk->pid,tsk->real_parent->comm,tsk->real_parent->pid);
-	 }
-	}
-	else
-	{
-	  printk("machine_shutdown: start, Proess(%s:%d)\n", tsk->comm, tsk->pid);	  
-	}
 
 	/* Flush the console to make sure all the relevant messages make it
 	 * out to the console drivers */

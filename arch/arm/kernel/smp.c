@@ -77,10 +77,6 @@ enum ipi_msg_type {
 	IPI_CALL_FUNC_SINGLE,
 	IPI_CPU_STOP,
 	IPI_CPU_BACKTRACE,
-#ifdef CONFIG_TRUSTY
-	IPI_CUSTOM_FIRST,
-	IPI_CUSTOM_LAST = 15,
-#endif
 };
 
 static DECLARE_COMPLETION(cpu_running);
@@ -748,9 +744,7 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 		break;
 
 	case IPI_CPU_BACKTRACE:
-        mt_trace_ISR_start(ipinr);
 		ipi_cpu_backtrace(cpu, regs);
-        mt_trace_ISR_end(ipinr);
 		break;
 
 	default:

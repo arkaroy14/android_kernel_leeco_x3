@@ -62,12 +62,12 @@ MODULE_PARM_DESC (rndis_debug, "enable debugging");
 int rndis_ul_max_pkt_per_xfer_rcvd;
 module_param(rndis_ul_max_pkt_per_xfer_rcvd, int, S_IRUGO);
 MODULE_PARM_DESC(rndis_ul_max_pkt_per_xfer_rcvd,
-	"Max num of REMOTE_NDIS_PACKET_MSGs received in a single transfer");
+		"Max num of REMOTE_NDIS_PACKET_MSGs received in a single transfer");
 
 int rndis_ul_max_xfer_size_rcvd;
 module_param(rndis_ul_max_xfer_size_rcvd, int, S_IRUGO);
 MODULE_PARM_DESC(rndis_ul_max_xfer_size_rcvd,
-	"Max size of bus transfer received");
+		"Max size of bus transfer received");
 
 
 static rndis_params rndis_per_dev_params[RNDIS_MAX_CONFIGS];
@@ -764,10 +764,13 @@ static int rndis_reset_response(int configNr, rndis_reset_msg_type *buf)
 	rndis_reset_cmplt_type *resp;
 	rndis_resp_t *r;
 	struct rndis_params *params = rndis_per_dev_params + configNr;
-
-	/* patch for RNDIS reset msg : clear the previous response ~*/
-	u8 *buf_legacy;
+        u8 *buf_legacy;
 	u32 length;
+	u8 *xbuf;
+
+	/* drain the response queue */
+	while ((xbuf = rndis_get_next_response(configNr, &length)))
+		rndis_free_response(configNr, xbuf);
 
 	pr_debug("%s: rndis reset !! clean the old resposes...\n", __func__);
 	while ((buf_legacy = rndis_get_next_response(configNr, &length)))
@@ -1038,10 +1041,8 @@ int rndis_set_param_dev(u8 configNr, struct net_device *dev, u16 *cdc_filter)
 	rndis_per_dev_params[configNr].dev = dev;
 	rndis_per_dev_params[configNr].filter = cdc_filter;
 
-	/* reset aggregation stats for every set_alt */
 	rndis_ul_max_xfer_size_rcvd = 0;
 	rndis_ul_max_pkt_per_xfer_rcvd = 0;
-
 	return 0;
 }
 
@@ -1150,19 +1151,23 @@ int rndis_rm_hdr(struct gether *port,
 			struct sk_buff *skb,
 			struct sk_buff_head *list)
 {
-	int num_pkts = 0;
+	int num_pkts = 1;
 
 	if (skb->len > rndis_ul_max_xfer_size_rcvd)
 		rndis_ul_max_xfer_size_rcvd = skb->len;
 
 	while (skb->len) {
 		struct rndis_packet_msg_type *hdr;
-		struct sk_buff		*skb2;
-		u32		msg_len, data_offset, data_len;
+		struct sk_buff          *skb2;
+		u32             msg_len, data_offset, data_len;
+
+		/* some rndis hosts send extra byte to avoid zlp, ignore it */
+		if (skb->len == 1) {
+			dev_kfree_skb_any(skb);
+			return 0;
+		}
 
 		if (skb->len < sizeof *hdr) {
-			pr_err("invalid rndis pkt: skblen:%u hdr_len:%lu",
-					skb->len, (long)sizeof *hdr);
 			dev_kfree_skb_any(skb);
 			return -EINVAL;
 		}
@@ -1173,23 +1178,20 @@ int rndis_rm_hdr(struct gether *port,
 		data_len = le32_to_cpu(hdr->DataLength);
 
 		if (skb->len < msg_len ||
-			((data_offset + data_len + 8) > msg_len)) {
+				((data_offset + data_len + 8) > msg_len)) {
 			pr_err("invalid rndis message: %d/%d/%d/%d, len:%d\n",
-				le32_to_cpu(hdr->MessageType),
-				msg_len, data_offset, data_len, skb->len);
+					le32_to_cpu(hdr->MessageType),
+					msg_len, data_offset, data_len, skb->len);
 			dev_kfree_skb_any(skb);
 			return -EOVERFLOW;
 		}
-
 		if (le32_to_cpu(hdr->MessageType) != RNDIS_MSG_PACKET) {
 			pr_err("invalid rndis message: %d/%d/%d/%d, len:%d\n",
-				le32_to_cpu(hdr->MessageType),
-				msg_len, data_offset, data_len, skb->len);
+					le32_to_cpu(hdr->MessageType),
+					msg_len, data_offset, data_len, skb->len);
 			dev_kfree_skb_any(skb);
 			return -EINVAL;
 		}
-
-		num_pkts++;
 
 		skb_pull(skb, data_offset + 8);
 
@@ -1209,6 +1211,8 @@ int rndis_rm_hdr(struct gether *port,
 		skb_pull(skb, msg_len - sizeof *hdr);
 		skb_trim(skb2, data_len);
 		skb_queue_tail(list, skb2);
+
+		num_pkts++;
 	}
 
 	if (num_pkts > rndis_ul_max_pkt_per_xfer_rcvd)

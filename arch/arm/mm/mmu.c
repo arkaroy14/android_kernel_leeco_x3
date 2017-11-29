@@ -708,8 +708,9 @@ static void __init alloc_init_pmd(pud_t *pud, unsigned long addr,
 }
 
 static void __init alloc_init_pud(pgd_t *pgd, unsigned long addr,
-	unsigned long end, phys_addr_t phys, const struct mem_type *type,
-	bool force_pages)
+				  unsigned long end, phys_addr_t phys,
+				  const struct mem_type *type,
+				  bool force_pages)
 {
 	pud_t *pud = pud_offset(pgd, addr);
 	unsigned long next;
@@ -1337,10 +1338,6 @@ static void __init map_lowmem(void)
 	for_each_memblock(memory, reg) {
 		start = reg->base;
 		end = start + reg->size;
-                MTK_MEMCFG_LOG_AND_PRINTK(KERN_ALERT"[PHY layout]kernel   :   0x%08llx - 0x%08llx (0x%08llx)\n",
-                      (unsigned long long)start,
-                      (unsigned long long)end - 1,
-                      (unsigned long long)reg->size);
 
 		if (end > arm_lowmem_limit)
 			end = arm_lowmem_limit;
@@ -1352,19 +1349,12 @@ static void __init map_lowmem(void)
 		map.length = end - start;
 		map.type = MT_MEMORY;
 
-		if (!(end & ~SECTION_MASK))
-			memblock_set_current_limit(end);
-
-                printk(KERN_ALERT"creating mapping start pa: 0x%08llx @ 0x%08llx "
-                        ", end pa: 0x%08llx @ 0x%08llx\n",
-                       (unsigned long long)start, (unsigned long long)map.virtual,
-                       (unsigned long long)end, (unsigned long long)__phys_to_virt(end));
 		create_mapping(&map, false);
 	}
 
 #ifdef CONFIG_DEBUG_RODATA
-	start = __pa((unsigned long)_stext & PMD_MASK);
-	end =  __pa(ALIGN((unsigned long)__end_rodata, PMD_SIZE));
+	start = __pa(_stext) & PMD_MASK;
+	end = ALIGN(__pa(__end_rodata), PMD_SIZE);
 
 	map.pfn = __phys_to_pfn(start);
 	map.virtual = __phys_to_virt(start);

@@ -392,14 +392,6 @@ out:
 		else
 			sock_put(sk);
 	}
-out_nosk:
-
-	if (sk) {
-		if (sk->sk_state == TCP_TIME_WAIT)
-			inet_twsk_put((struct inet_timewait_sock *)sk);
-		else
-			sock_put(sk);
-	}
 	return err;
 }
 EXPORT_SYMBOL_GPL(inet_diag_dump_one_icsk);

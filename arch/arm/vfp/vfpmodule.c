@@ -690,7 +690,6 @@ static int vfp_hotplug(struct notifier_block *b, unsigned long action,
 
 #ifdef CONFIG_KERNEL_MODE_NEON
 
-
 /*
  * Kernel-side NEON support functions
  */
@@ -708,10 +707,8 @@ void kernel_neon_begin(void)
 	BUG_ON(in_interrupt());
 	cpu = get_cpu();
 
-#ifndef CONFIG_VFP_OPT
 	fpexc = fmrx(FPEXC) | FPEXC_EN;
 	fmxr(FPEXC, fpexc);
-#endif
 
 	/*
 	 * Save the userland NEON/VFP state. Under UP,
@@ -729,10 +726,8 @@ EXPORT_SYMBOL(kernel_neon_begin);
 
 void kernel_neon_end(void)
 {
-#ifndef CONFIG_VFP_OPT
 	/* Disable the NEON/VFP unit. */
 	fmxr(FPEXC, fmrx(FPEXC) & ~FPEXC_EN);
-#endif
 	put_cpu();
 }
 EXPORT_SYMBOL(kernel_neon_end);

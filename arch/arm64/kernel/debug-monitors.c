@@ -144,7 +144,7 @@ static int __cpuinit os_lock_notify(struct notifier_block *self,
 				    unsigned long action, void *data)
 {
 	int cpu = (unsigned long)data;
-	if (action == CPU_ONLINE)
+	if ((action & ~CPU_TASKS_FROZEN) == CPU_ONLINE)
 		smp_call_function_single(cpu, clear_os_lock, NULL, 1);
 	return NOTIFY_OK;
 }
@@ -271,61 +271,22 @@ static int single_step_handler(unsigned long addr, unsigned int esr,
 	return 0;
 }
 
-/*
- * Breakpoint handler is re-entrant as another breakpoint can
- * hit within breakpoint handler, especically in kprobes.
- * Use reader/writer locks instead of plain spinlock.
- */
-static LIST_HEAD(break_hook);
-DEFINE_RWLOCK(break_hook_lock);
-
-void register_break_hook(struct break_hook *hook)
-{
-	write_lock(&break_hook_lock);
-	list_add(&hook->node, &break_hook);
-	write_unlock(&break_hook_lock);
-}
-
-void unregister_break_hook(struct break_hook *hook)
-{
-	write_lock(&break_hook_lock);
-	list_del(&hook->node);
-	write_unlock(&break_hook_lock);
-}
-
-static int call_break_hook(struct pt_regs *regs, unsigned int esr)
-{
-	struct break_hook *hook;
-	int (*fn)(struct pt_regs *regs, unsigned int esr) = NULL;
-
-	read_lock(&break_hook_lock);
-	list_for_each_entry(hook, &break_hook, node)
-		if ((esr & hook->esr_mask) == hook->esr_val)
-			fn = hook->fn;
-	read_unlock(&break_hook_lock);
-
-	return fn ? fn(regs, esr) : DBG_HOOK_ERROR;
-}
-
 static int brk_handler(unsigned long addr, unsigned int esr,
 		       struct pt_regs *regs)
 {
 	siginfo_t info;
 
-	if (user_mode(regs)) {
-		info = (siginfo_t) {
-			.si_signo = SIGTRAP,
-			.si_errno = 0,
-			.si_code  = TRAP_BRKPT,
-			.si_addr  = (void __user *)instruction_pointer(regs),
-		};
-
-		force_sig_info(SIGTRAP, &info, current);
-	} else if (call_break_hook(regs, esr) != DBG_HOOK_HANDLED) {
-		pr_warning("Unexpected kernel BRK exception at EL1\n");
+	if (!user_mode(regs))
 		return -EFAULT;
-	}
 
+	info = (siginfo_t) {
+		.si_signo = SIGTRAP,
+		.si_errno = 0,
+		.si_code  = TRAP_BRKPT,
+		.si_addr  = (void __user *)instruction_pointer(regs),
+	};
+
+	force_sig_info(SIGTRAP, &info, current);
 	return 0;
 }
 

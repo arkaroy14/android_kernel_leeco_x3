@@ -75,10 +75,10 @@ module_param(rndis_dl_max_pkt_per_xfer, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(rndis_dl_max_pkt_per_xfer,
 	"Maximum packets per transfer for DL aggregation");
 
-static unsigned int rndis_ul_max_pkt_per_xfer = 1;
+static unsigned int rndis_ul_max_pkt_per_xfer = 3;
 module_param(rndis_ul_max_pkt_per_xfer, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(rndis_ul_max_pkt_per_xfer,
-	"Maximum packets per transfer for UL aggregation");
+       "Maximum packets per transfer for UL aggregation");
 
 struct f_rndis {
 	struct gether			port;
@@ -513,7 +513,7 @@ static void rndis_command_complete(struct usb_ep *ep, struct usb_request *req)
 			rndis->port.dl_max_transfer_len = buf->MaxTransferSize;
 		}else{
 			rndis->port.multi_pkt_xfer = 0;
-		}		
+		}
 		DBG(cdev, "%s: MaxTransferSize: %d : Multi_pkt_txr: %s\n",
 				__func__, buf->MaxTransferSize,
 				rndis->port.multi_pkt_xfer ? "enabled" :
